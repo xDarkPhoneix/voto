@@ -18,7 +18,7 @@ const adminNav: NavItem[] = [
   { label: "Dashboard", to: "/admin", icon: LayoutDashboard },
   { label: "Elections", to: "/admin/elections", icon: Vote },
   { label: "Candidates", to: "/admin/candidates", icon: Users },
-  { label: "Voters", to: "/admin/voters", icon: Users },
+  // { label: "Voters", to: "/admin/voters", icon: Users },
   { label: "Results", to: "/admin/results", icon: BarChart3 },
 ];
 

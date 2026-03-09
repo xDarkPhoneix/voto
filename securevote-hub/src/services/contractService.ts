@@ -1,95 +1,268 @@
-import API  from "./auth.service";
+import { ethers } from "ethers"
+import VotingABI from "../abi/Voting.json"
 
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS as string
 
-export interface Election {
-  id: string;
-  title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  status: "upcoming" | "active" | "ended";
-  candidates: Candidate[];
-  totalVotes: number;
+declare global {
+  interface Window {
+    ethereum?: any
+  }
 }
+
+/* =====================================
+   Types
+===================================== */
 
 export interface Candidate {
-  id: string;
-  name: string;
-  party: string;
-  imageUrl: string;
-  walletAddress: string;
-  votes: number;
+  id: string
+  name: string
+  party: string
+  imageUrl: string
+  walletAddress: string
+  votes: number
 }
 
+export interface Election {
+  id: string
+  title: string
+  description: string
+  startDate: number
+  endDate: number
+  status: "upcoming" | "active" | "ended"
+  totalVotes: number
+  candidates: Candidate[]
+}
+
+/* =====================================
+   Provider
+===================================== */
+
+const getProvider = async () => {
+
+  if (!window.ethereum) {
+    throw new Error("MetaMask not installed")
+  }
+
+  const provider = new ethers.BrowserProvider(window.ethereum)
+
+  await provider.send("eth_requestAccounts", [])
+
+  return provider
+}
+
+const getContract = async () => {
+
+  const provider = await getProvider()
+
+  const signer = await provider.getSigner()
+
+  return new ethers.Contract(
+    CONTRACT_ADDRESS,
+    VotingABI.abi,
+    signer
+  )
+}
+
+/* =====================================
+   Helper
+===================================== */
+
+const getStatus = (start:number,end:number) => {
+
+  const now = Date.now()/1000
+
+  if(now < start) return "upcoming"
+
+  if(now > end) return "ended"
+
+  return "active"
+}
+
+/* =====================================
+   Contract Service
+===================================== */
+
 export const contractService = {
+
+  /* =====================================
+     Fetch Elections + Candidates
+  ===================================== */
+
   async getElections(): Promise<Election[]> {
-    const { data } = await API.get("/elections");
-    return data;
+
+    const contract = await getContract()
+
+    const count = Number(await contract.electionCount())
+
+    const elections: Election[] = []
+
+    for(let i=1;i<=count;i++){
+
+      const e = await contract.getElection(i)
+
+      const candidates: Candidate[] = []
+
+      for(let j=1;j<=Number(e.candidateCount);j++){
+
+        const c = await contract.getCandidate(i,j)
+
+        candidates.push({
+          id: String(c.id),
+          name: c.name,
+          party: c.party,
+          imageUrl: c.imageUrl,
+          walletAddress: c.walletAddress,
+          votes: Number(c.votes)
+        })
+
+      }
+
+      elections.push({
+        id: String(e.id),
+        title: e.title,
+        description: e.description,
+        startDate: Number(e.startDate),
+        endDate: Number(e.endDate),
+        status: getStatus(Number(e.startDate),Number(e.endDate)),
+        totalVotes: Number(e.totalVotes),
+        candidates
+      })
+    }
+
+    return elections
   },
 
-  async getElection(id: string): Promise<Election | undefined> {
-    const { data } = await API.get(`/elections/${id}`);
-    return data;
+  /* =====================================
+     Create Election
+  ===================================== */
+
+  async createElection(data:{
+    title:string
+    description:string
+    startDate:string
+    endDate:string
+  }) {
+
+    const contract = await getContract()
+
+    const start = Math.floor(new Date(data.startDate).getTime()/1000)
+    const end = Math.floor(new Date(data.endDate).getTime()/1000)
+
+    const tx = await contract.createElection(
+      data.title,
+      data.description,
+      start,
+      end
+    )
+
+    await tx.wait()
   },
 
-  async createElection(data: {
-    title: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-  }): Promise<Election> {
-    const response = await API.post("/elections", data);
-    return response.data;
-  },
+  /* =====================================
+     Add Candidate
+  ===================================== */
 
   async addCandidate(
-    electionId: string,
-    candidate: Omit<Candidate, "id" | "votes">
-  ): Promise<Candidate> {
-    const response = await API.post(
-      `/elections/${electionId}/candidates`,
-      candidate
-    );
-    return response.data;
+    electionId:string,
+    data:{
+      name:string
+      party:string
+      imageUrl:string
+      walletAddress:string
+    }
+  ){
+
+    const contract = await getContract()
+
+    const tx = await contract.addCandidate(
+      electionId,
+      data.name,
+      data.party,
+      data.imageUrl,
+      data.walletAddress
+    )
+
+    await tx.wait()
   },
+
+  /* =====================================
+     Start Election
+  ===================================== */
+
+  async startElection(id:string){
+
+    const contract = await getContract()
+
+    const tx = await contract.startElection(id)
+
+    await tx.wait()
+  },
+
+  /* =====================================
+     End Election
+  ===================================== */
+
+  async endElection(id:string){
+
+    const contract = await getContract()
+
+    const tx = await contract.endElection(id)
+
+    await tx.wait()
+  },
+
+  /* =====================================
+     Vote
+  ===================================== */
 
   async vote(
-    electionId: string,
-    candidateId: string,
-    walletAddress: string
-  ): Promise<string> {
-    const response = await API.post(
-      `/elections/${electionId}/vote`,
-      {
-        candidateId,
-        walletAddress,
-      }
-    );
+    electionId:string,
+    candidateId:string
+  ):Promise<string>{
 
-    return response.data.txHash; // backend must return { txHash: "0x..." }
+    const contract = await getContract()
+
+    const tx = await contract.vote(
+      electionId,
+      candidateId
+    )
+
+    const receipt = await tx.wait()
+
+    return receipt.hash
   },
+
+  /* =====================================
+     Has Voted
+  ===================================== */
 
   async hasVoted(
-    electionId: string,
-    walletAddress: string
-  ): Promise<boolean> {
-    const { data } = await API.get(
-      `/elections/${electionId}/has-voted/${walletAddress}`
-    );
+    electionId:string,
+    address:string
+  ){
 
-    return data.hasVoted; // backend must return { hasVoted: true/false }
+    const contract = await getContract()
+
+    return await contract.hasVoted(
+      electionId,
+      address
+    )
   },
 
-  async startElection(electionId: string): Promise<void> {
-    await API.post(`/elections/${electionId}/start`);
-  },
+  /* =====================================
+     Get Winner
+  ===================================== */
 
-  async endElection(electionId: string): Promise<void> {
-    await API.post(`/elections/${electionId}/end`);
-  },
+  async getWinner(electionId:string){
 
-  async getWinner(electionId: string): Promise<Candidate | null> {
-    const { data } = await API.get(`/elections/${electionId}/winner`);
-    return data;
-  },
-};
+    const contract = await getContract()
+
+    const result = await contract.getWinner(electionId)
+
+    return {
+      winnerId:Number(result[0]),
+      votes:Number(result[1])
+    }
+  }
+
+}
