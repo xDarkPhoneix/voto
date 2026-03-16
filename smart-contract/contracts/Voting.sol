@@ -9,14 +9,49 @@ contract BlockVote {
         admin = msg.sender;
     }
 
+    /* ------------------------------------------------ */
+    /*                     MODIFIERS                    */
+    /* ------------------------------------------------ */
+
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin allowed");
+        _;
+    }
+
+    modifier onlySubAdmin() {
+        require(subAdmins[msg.sender].isActive, "Only subadmin allowed");
+        _;
+    }
+
+    modifier onlyAdminOrSubAdmin() {
+        require(
+            msg.sender == admin || subAdmins[msg.sender].isActive,
+            "Not authorized"
+        );
         _;
     }
 
     modifier electionExists(uint _electionId) {
         require(_electionId > 0 && _electionId <= electionCount, "Election not found");
         _;
+    }
+
+    /* ------------------------------------------------ */
+    /*                    STRUCTS                       */
+    /* ------------------------------------------------ */
+
+    struct SubAdmin {
+        address wallet;
+        string fullName;
+        string email;
+        bool isActive;
+    }
+
+    struct Voter {
+        address wallet;
+        string fullName;
+        bool registered;
+        bool verified;
     }
 
     struct Candidate {
@@ -42,15 +77,91 @@ contract BlockVote {
         mapping(address => bool) voters;
     }
 
+    /* ------------------------------------------------ */
+    /*                    STORAGE                       */
+    /* ------------------------------------------------ */
+
     uint public electionCount;
 
     mapping(uint => Election) private elections;
+
+    mapping(address => SubAdmin) public subAdmins;
+
+    mapping(address => Voter) public voters;
+
+    /* ------------------------------------------------ */
+    /*                     EVENTS                       */
+    /* ------------------------------------------------ */
+
+    event SubAdminAdded(address wallet, string name);
+    event SubAdminRemoved(address wallet);
+
+    event VoterRegistered(address voter);
+    event VoterVerified(address voter);
 
     event ElectionCreated(uint electionId, string title);
     event CandidateAdded(uint electionId, uint candidateId);
     event VoteCast(uint electionId, uint candidateId, address voter);
 
-    // CREATE ELECTION
+    /* ------------------------------------------------ */
+    /*                 SUB ADMIN CONTROL                */
+    /* ------------------------------------------------ */
+
+    function addSubAdmin(
+        address _wallet,
+        string memory _name,
+        string memory _email
+    ) public onlyAdmin {
+
+        subAdmins[_wallet] = SubAdmin({
+            wallet: _wallet,
+            fullName: _name,
+            email: _email,
+            isActive: true
+        });
+
+        emit SubAdminAdded(_wallet, _name);
+    }
+
+    function removeSubAdmin(address _wallet) public onlyAdmin {
+        subAdmins[_wallet].isActive = false;
+        emit SubAdminRemoved(_wallet);
+    }
+
+    /* ------------------------------------------------ */
+    /*                 VOTER REGISTRATION               */
+    /* ------------------------------------------------ */
+
+    function registerVoter(string memory _name) public {
+
+        require(!voters[msg.sender].registered, "Already registered");
+
+        voters[msg.sender] = Voter({
+            wallet: msg.sender,
+            fullName: _name,
+            registered: true,
+            verified: false
+        });
+
+        emit VoterRegistered(msg.sender);
+    }
+
+    function verifyVoter(address _voter)
+        public
+        onlyAdminOrSubAdmin
+    {
+        require(voters[_voter].registered, "Not registered");
+        require(!voters[_voter].verified, "Already verified");
+
+        voters[_voter].verified = true;
+
+        emit VoterVerified(_voter);
+    }
+
+    /* ------------------------------------------------ */
+    /*                 CREATE ELECTION                  */
+    /* ------------------------------------------------ */
+
     function createElection(
         string memory _title,
         string memory _description,
@@ -74,7 +185,10 @@ contract BlockVote {
         emit ElectionCreated(electionCount, _title);
     }
 
-    // ADD CANDIDATE
+    /* ------------------------------------------------ */
+    /*                ADD CANDIDATE                     */
+    /* ------------------------------------------------ */
+
     function addCandidate(
         uint _electionId,
         string memory _name,
@@ -83,8 +197,8 @@ contract BlockVote {
         address _wallet
     )
         public
-        onlyAdmin
         electionExists(_electionId)
+        onlyAdminOrSubAdmin
     {
         Election storage e = elections[_electionId];
 
@@ -102,7 +216,10 @@ contract BlockVote {
         emit CandidateAdded(_electionId, e.candidateCount);
     }
 
-    // START ELECTION
+    /* ------------------------------------------------ */
+    /*             START / END ELECTION                 */
+    /* ------------------------------------------------ */
+
     function startElection(uint _electionId)
         public
         onlyAdmin
@@ -111,7 +228,6 @@ contract BlockVote {
         elections[_electionId].active = true;
     }
 
-    // END ELECTION
     function endElection(uint _electionId)
         public
         onlyAdmin
@@ -120,13 +236,17 @@ contract BlockVote {
         elections[_electionId].active = false;
     }
 
-    // VOTE
+    /* ------------------------------------------------ */
+    /*                     VOTE                         */
+    /* ------------------------------------------------ */
+
     function vote(uint _electionId, uint _candidateId)
         public
         electionExists(_electionId)
     {
         Election storage e = elections[_electionId];
 
+        require(voters[msg.sender].verified, "Not verified voter");
         require(e.active, "Election not active");
         require(!e.voters[msg.sender], "Already voted");
         require(_candidateId > 0 && _candidateId <= e.candidateCount, "Invalid candidate");
@@ -140,17 +260,10 @@ contract BlockVote {
         emit VoteCast(_electionId, _candidateId, msg.sender);
     }
 
-    // CHECK IF USER VOTED
-    function hasVoted(uint _electionId, address _voter)
-        public
-        view
-        electionExists(_electionId)
-        returns(bool)
-    {
-        return elections[_electionId].voters[_voter];
-    }
+    /* ------------------------------------------------ */
+    /*                GET ELECTION INFO                 */
+    /* ------------------------------------------------ */
 
-    // GET ELECTION BASIC INFO
     function getElection(uint _electionId)
         public
         view
@@ -180,7 +293,10 @@ contract BlockVote {
         );
     }
 
-    // GET CANDIDATE
+    /* ------------------------------------------------ */
+    /*               GET CANDIDATE INFO                 */
+    /* ------------------------------------------------ */
+
     function getCandidate(uint _electionId, uint _candidateId)
         public
         view
@@ -190,7 +306,7 @@ contract BlockVote {
             string memory name,
             string memory party,
             string memory imageUrl,
-            address walletAddress,
+            address wallet,
             uint votes
         )
     {
@@ -206,7 +322,22 @@ contract BlockVote {
         );
     }
 
-    // GET WINNER
+    /* ------------------------------------------------ */
+    /*                   HAS VOTED                      */
+    /* ------------------------------------------------ */
+
+    function hasVoted(uint _electionId, address _voter)
+        public
+        view
+        returns(bool)
+    {
+        return elections[_electionId].voters[_voter];
+    }
+
+    /* ------------------------------------------------ */
+    /*                 GET WINNER                       */
+    /* ------------------------------------------------ */
+
     function getWinner(uint _electionId)
         public
         view
@@ -224,7 +355,6 @@ contract BlockVote {
                 highestVotes = e.candidates[i].votes;
                 winningCandidate = i;
             }
-
         }
 
         return (winningCandidate, highestVotes);

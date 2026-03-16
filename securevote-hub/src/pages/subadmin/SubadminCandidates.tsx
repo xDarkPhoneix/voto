@@ -22,15 +22,6 @@ import {
   DialogTrigger
 } from "@/components/ui/dialog"
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from "@/components/ui/table"
-
 import { toast } from "@/hooks/use-toast"
 import { PlusCircle, Users } from "lucide-react"
 
@@ -43,8 +34,8 @@ import { z } from "zod"
 /* ---------------- Validation ---------------- */
 
 const candidateSchema = z.object({
-  name: z.string().min(2, "Name required"),
-  party: z.string().min(2, "Party required"),
+  name: z.string().min(2, "Candidate name required"),
+  party: z.string().min(2, "Party name required"),
   imageUrl: z.string().optional(),
   walletAddress: z.string().min(10, "Wallet address required")
 })
@@ -53,11 +44,11 @@ type CandidateForm = z.infer<typeof candidateSchema>
 
 
 
-export default function AdminCandidates() {
+export default function SubadminCandidates() {
 
   const [elections, setElections] = useState<Election[]>([])
   const [selectedElection, setSelectedElection] = useState<string>("")
-  const [open, setOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   const [loadingPage, setLoadingPage] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -83,12 +74,12 @@ export default function AdminCandidates() {
 
       setLoadingPage(true)
 
-      const els = await contractService.getElections()
+      const data = await contractService.getElections()
 
-      setElections(els)
+      setElections(data)
 
-      if (!selectedElection && els.length > 0) {
-        setSelectedElection(els[0].id)
+      if (!selectedElection && data.length > 0) {
+        setSelectedElection(String(data[0].id))
       }
 
     } catch {
@@ -106,29 +97,32 @@ export default function AdminCandidates() {
 
   }
 
-
-
   useEffect(() => {
     loadElections()
   }, [])
 
 
 
+  /* ---------------- Current Election ---------------- */
+
   const currentElection =
-    elections.find(e => e.id === selectedElection)
+    elections.find(e => String(e.id) === selectedElection)
 
 
 
   /* ---------------- Add Candidate ---------------- */
 
-  const onAdd = async (data: CandidateForm) => {
+  const handleAddCandidate = async (data: CandidateForm) => {
 
     if (!selectedElection) {
+
       toast({
         title: "Select an election first",
         variant: "destructive"
       })
+
       return
+
     }
 
     try {
@@ -146,10 +140,10 @@ export default function AdminCandidates() {
       )
 
       toast({
-        title: "Candidate added to blockchain"
+        title: "Candidate added successfully"
       })
 
-      setOpen(false)
+      setDialogOpen(false)
       reset()
 
       await loadElections()
@@ -157,7 +151,7 @@ export default function AdminCandidates() {
     } catch (err: any) {
 
       toast({
-        title: err?.message || "Blockchain transaction failed",
+        title: err?.message || "Failed to add candidate",
         variant: "destructive"
       })
 
@@ -175,18 +169,20 @@ export default function AdminCandidates() {
 
   return (
 
-    <DashboardLayout role="admin">
+    <DashboardLayout role="subadmin">
+
+      {/* Header */}
 
       <div className="mb-6 flex items-center justify-between">
 
         <div>
 
           <h1 className="text-3xl font-bold">
-            Candidates
+            Manage Candidates
           </h1>
 
           <p className="text-muted-foreground">
-            Manage election candidates
+            Add candidates to elections
           </p>
 
         </div>
@@ -195,7 +191,7 @@ export default function AdminCandidates() {
 
         {/* Add Candidate */}
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 
           <DialogTrigger asChild>
 
@@ -218,7 +214,7 @@ export default function AdminCandidates() {
 
 
             <form
-              onSubmit={handleSubmit(onAdd)}
+              onSubmit={handleSubmit(handleAddCandidate)}
               className="space-y-4"
             >
 
@@ -240,14 +236,23 @@ export default function AdminCandidates() {
 
 
               <div>
-                <Label>Image URL</Label>
+                <Label>Image URL (optional)</Label>
                 <Input {...register("imageUrl")} className="mt-1" />
               </div>
 
 
               <div>
                 <Label>Wallet Address</Label>
-                <Input {...register("walletAddress")} className="mt-1" />
+                <Input
+                  {...register("walletAddress")}
+                  placeholder="0x..."
+                  className="mt-1"
+                />
+                {errors.walletAddress && (
+                  <p className="text-xs text-destructive">
+                    {errors.walletAddress.message}
+                  </p>
+                )}
               </div>
 
 
@@ -256,7 +261,7 @@ export default function AdminCandidates() {
                 className="w-full"
                 disabled={submitting}
               >
-                {submitting ? "Submitting..." : "Add Candidate"}
+                {submitting ? "Adding..." : "Add Candidate"}
               </Button>
 
             </form>
@@ -273,23 +278,23 @@ export default function AdminCandidates() {
 
       <div className="mb-6">
 
+        <Label>Select Election</Label>
+
         <Select
           value={selectedElection}
           onValueChange={setSelectedElection}
         >
 
-          <SelectTrigger className="w-64">
-            <SelectValue placeholder="Select election" />
+          <SelectTrigger className="mt-1 w-full max-w-sm">
+            <SelectValue placeholder="Choose election" />
           </SelectTrigger>
 
           <SelectContent>
 
             {elections.map(e => (
-
-              <SelectItem key={e.id} value={e.id}>
+              <SelectItem key={e.id} value={String(e.id)}>
                 {e.title}
               </SelectItem>
-
             ))}
 
           </SelectContent>
@@ -300,90 +305,68 @@ export default function AdminCandidates() {
 
 
 
-      {/* Candidates Table */}
+      {/* Candidate List */}
 
-      <div className="glass-card overflow-hidden">
-
-        <Table>
-
-          <TableHeader>
-
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Party</TableHead>
-              <TableHead className="text-right">
-                Votes
-              </TableHead>
-            </TableRow>
-
-          </TableHeader>
-
-
-          <TableBody>
-
-            {loadingPage && (
-
-              <TableRow>
-
-                <TableCell colSpan={3} className="text-center py-8">
-                  Loading candidates...
-                </TableCell>
-
-              </TableRow>
-
-            )}
+      {loadingPage && (
+        <p className="text-center text-muted-foreground">
+          Loading elections...
+        </p>
+      )}
 
 
 
-            {!loadingPage &&
-              currentElection?.candidates.map(c => (
+      {!loadingPage && currentElection && (
 
-              <TableRow key={c.id}>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
-                <TableCell className="font-medium">
-                  {c.name}
-                </TableCell>
+          {(currentElection.candidates || []).map(candidate => (
 
-                <TableCell>
-                  {c.party}
-                </TableCell>
+            <div
+              key={candidate.id}
+              className="glass-card p-4"
+            >
 
-                <TableCell className="text-right font-semibold">
-                  {c.votes}
-                </TableCell>
+              <div className="flex items-center gap-3">
 
-              </TableRow>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
+                  <Users className="h-5 w-5 text-primary" />
+                </div>
 
-            ))}
+                <div>
+
+                  <p className="font-semibold">
+                    {candidate.name}
+                  </p>
+
+                  <p className="text-sm text-muted-foreground">
+                    {candidate.party}
+                  </p>
+
+                </div>
+
+              </div>
+
+              <p className="mt-2 font-mono text-xs text-muted-foreground break-all">
+                {candidate.walletAddress}
+              </p>
+
+            </div>
+
+          ))}
 
 
 
-            {!loadingPage &&
-              (!currentElection ||
-              currentElection.candidates.length === 0) && (
+          {(currentElection.candidates?.length || 0) === 0 && (
 
-              <TableRow>
+            <p className="col-span-full py-8 text-center text-muted-foreground">
+              No candidates added yet
+            </p>
 
-                <TableCell
-                  colSpan={3}
-                  className="py-8 text-center text-muted-foreground"
-                >
+          )}
 
-                  <Users className="mx-auto mb-2 h-8 w-8 opacity-50" />
+        </div>
 
-                  No candidates yet
-
-                </TableCell>
-
-              </TableRow>
-
-            )}
-
-          </TableBody>
-
-        </Table>
-
-      </div>
+      )}
 
     </DashboardLayout>
 

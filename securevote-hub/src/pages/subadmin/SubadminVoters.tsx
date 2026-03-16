@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { DashboardLayout } from "@/components/DashboardLayout"
-
 import { Button } from "@/components/ui/button"
+
 import {
   Table,
   TableBody,
@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/table"
 
 import { Badge } from "@/components/ui/badge"
-import { toast } from "@/hooks/use-toast"
-import API from "@/services/auth.service"
 
+import { toast } from "@/hooks/use-toast"
 import { Check, X } from "lucide-react"
+import API from "@/services/auth.service"
 
 
 
@@ -30,7 +30,7 @@ interface Voter {
 
 
 
-export default function AdminVoters() {
+export default function SubadminVoters() {
 
   const [voters, setVoters] = useState<Voter[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,7 +38,7 @@ export default function AdminVoters() {
 
 
 
-  /* ---------------- FETCH VOTERS ---------------- */
+  /* ---------------- Load Voters ---------------- */
 
   const fetchVoters = async () => {
 
@@ -58,12 +58,12 @@ export default function AdminVoters() {
       })
 
     } finally {
+
       setLoading(false)
+
     }
 
   }
-
-
 
   useEffect(() => {
     fetchVoters()
@@ -71,7 +71,7 @@ export default function AdminVoters() {
 
 
 
-  /* ---------------- APPROVE / REJECT ---------------- */
+  /* ---------------- Approve / Reject ---------------- */
 
   const updateVoterStatus = async (
     voterId: string,
@@ -84,6 +84,14 @@ export default function AdminVoters() {
 
       await API.post(`/users/${voterId}/approve`, { approved })
 
+      toast({
+        title: approved
+          ? "Voter approved successfully"
+          : "Voter rejected"
+      })
+
+      /* optimistic UI update */
+
       setVoters(prev =>
         prev.map(v =>
           v._id === voterId
@@ -91,12 +99,6 @@ export default function AdminVoters() {
             : v
         )
       )
-
-      toast({
-        title: approved
-          ? "Voter approved"
-          : "Voter rejected"
-      })
 
     } catch {
 
@@ -115,38 +117,40 @@ export default function AdminVoters() {
 
 
 
-  /* ---------------- HELPERS ---------------- */
+  /* ---------------- Helpers ---------------- */
 
   const formatWallet = (wallet: string) => {
+
     if (!wallet) return "-"
+
     return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
+
   }
 
 
 
   const renderStatus = (status: boolean | null) => {
 
-    if (status === true) {
+    if (status === true)
       return (
         <Badge className="bg-green-500/20 text-green-400">
           Approved
         </Badge>
       )
-    }
 
-    if (status === false) {
+    if (status === false)
       return (
         <Badge variant="destructive">
           Rejected
         </Badge>
       )
-    }
 
     return (
       <Badge variant="secondary">
         Pending
       </Badge>
     )
+
   }
 
 
@@ -155,16 +159,18 @@ export default function AdminVoters() {
 
   return (
 
-    <DashboardLayout role="admin">
+    <DashboardLayout role="subadmin">
 
       <div className="mb-6">
+
         <h1 className="text-3xl font-bold">
-          Registered Voters
+          Verify Voters
         </h1>
 
         <p className="text-muted-foreground">
           Approve or reject voter registrations
         </p>
+
       </div>
 
 
@@ -174,6 +180,7 @@ export default function AdminVoters() {
         <Table>
 
           <TableHeader>
+
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
@@ -184,36 +191,35 @@ export default function AdminVoters() {
                 Actions
               </TableHead>
             </TableRow>
+
           </TableHeader>
 
 
 
           <TableBody>
 
+            {/* Loading */}
+
             {loading && (
+
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  Loading voters...
-                </TableCell>
-              </TableRow>
-            )}
 
-
-
-            {!loading && voters.length === 0 && (
-              <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="text-center py-8 text-muted-foreground"
+                  className="py-8 text-center text-muted-foreground"
                 >
-                  No voters registered yet
+                  Loading voters...
                 </TableCell>
+
               </TableRow>
+
             )}
 
 
 
-            {voters.map(voter => (
+            {/* Voters */}
+
+            {!loading && voters.map(voter => (
 
               <TableRow key={voter._id}>
 
@@ -232,8 +238,6 @@ export default function AdminVoters() {
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {formatWallet(voter.walletAddress)}
                 </TableCell>
-
-
 
                 <TableCell>
                   {renderStatus(voter.isApproved)}
@@ -282,6 +286,25 @@ export default function AdminVoters() {
               </TableRow>
 
             ))}
+
+
+
+            {/* Empty */}
+
+            {!loading && voters.length === 0 && (
+
+              <TableRow>
+
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-muted-foreground"
+                >
+                  No registered voters found
+                </TableCell>
+
+              </TableRow>
+
+            )}
 
           </TableBody>
 

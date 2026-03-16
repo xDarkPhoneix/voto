@@ -1,14 +1,12 @@
 import { Election } from "../models/election.model.js"
+import { User } from "../models/user.model.js"
 import { contract } from "../utils/blockchain.js"
 
 
-/* =====================================================
-   GET ALL ELECTIONS
-   GET /api/elections
-===================================================== */
+
+/* ================= GET ALL ELECTIONS ================= */
 
 export const getElections = async (req, res, next) => {
-
   try {
 
     const elections = await Election
@@ -23,14 +21,32 @@ export const getElections = async (req, res, next) => {
   } catch (error) {
     next(error)
   }
-
 }
 
 
-/* =====================================================
-   GET SINGLE ELECTION
-   GET /api/elections/:id
-===================================================== */
+
+/* ================= GET ACTIVE ELECTIONS ================= */
+
+export const getActiveElections = async (req, res, next) => {
+  try {
+
+    const elections = await Election
+      .find({ status: "active" })
+      .sort({ createdAt: -1 })
+
+    return res.status(200).json({
+      success: true,
+      data: elections
+    })
+
+  } catch (error) {
+    next(error)
+  }
+}
+
+
+
+/* ================= GET SINGLE ELECTION ================= */
 
 export const getElection = async (req, res, next) => {
 
@@ -57,10 +73,8 @@ export const getElection = async (req, res, next) => {
 }
 
 
-/* =====================================================
-   CREATE ELECTION
-   POST /api/elections
-===================================================== */
+
+/* ================= CREATE ELECTION ================= */
 
 export const createElection = async (req, res, next) => {
 
@@ -71,7 +85,7 @@ export const createElection = async (req, res, next) => {
     if (!title || !startDate || !endDate) {
       return res.status(400).json({
         success: false,
-        message: "Title, start date and end date are required"
+        message: "Title, start date and end date required"
       })
     }
 
@@ -85,7 +99,7 @@ export const createElection = async (req, res, next) => {
       })
     }
 
-    /* Create election on blockchain */
+    /* ---- Blockchain ---- */
 
     const tx = await contract.createElection(
       title,
@@ -96,21 +110,20 @@ export const createElection = async (req, res, next) => {
 
     const receipt = await tx.wait()
 
-    const blockchainElectionId =
-      receipt?.logs?.[0]?.args?.electionId ?? null
-
-
-    /* Save in database */
+    const electionCount = await contract.electionCount()
 
     const election = await Election.create({
       title,
       description,
       startDate,
       endDate,
-      blockchainId: blockchainElectionId,
-      status: "upcoming"
+      blockchainId: Number(electionCount),
+      status: "upcoming",
+      candidates: [],
+      voters: [],
+      totalVotes: 0,
+      txHash: receipt.hash
     })
-
 
     return res.status(201).json({
       success: true,
@@ -118,16 +131,18 @@ export const createElection = async (req, res, next) => {
     })
 
   } catch (error) {
+
+    console.error("CREATE ELECTION ERROR:", error)
+
     next(error)
+
   }
 
 }
 
 
-/* =====================================================
-   ADD CANDIDATE
-   POST /api/elections/:id/candidates
-===================================================== */
+
+/* ================= ADD CANDIDATE ================= */
 
 export const addCandidate = async (req, res, next) => {
 
@@ -135,13 +150,6 @@ export const addCandidate = async (req, res, next) => {
 
     const { name, party, imageUrl, walletAddress } = req.body
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Candidate name is required"
-      })
-    }
-
     const election = await Election.findById(req.params.id)
 
     if (!election) {
@@ -151,34 +159,35 @@ export const addCandidate = async (req, res, next) => {
       })
     }
 
-    /* Save candidate in database */
-
-    election.candidates.push({
-      name,
-      party,
-      imageUrl,
-      walletAddress
-    })
-
-    await election.save()
-
-    const candidate =
-      election.candidates[election.candidates.length - 1]
-
-
-    /* Add candidate to blockchain */
+    const wallet = walletAddress?.toLowerCase()
 
     const tx = await contract.addCandidate(
       election.blockchainId,
-      name
+      name,
+      party || "",
+      imageUrl || "",
+      wallet || "0x0000000000000000000000000000000000000000"
     )
 
     await tx.wait()
 
+    /* candidate id comes from blockchain order */
+    const candidateId = election.candidates.length + 1
+
+    election.candidates.push({
+      id: candidateId,
+      name,
+      party,
+      imageUrl,
+      walletAddress: wallet,
+      votes: 0
+    })
+
+    await election.save()
 
     return res.status(201).json({
       success: true,
-      data: candidate
+      data: election.candidates[election.candidates.length - 1]
     })
 
   } catch (error) {
@@ -188,23 +197,14 @@ export const addCandidate = async (req, res, next) => {
 }
 
 
-/* =====================================================
-   CAST VOTE
-   POST /api/elections/:id/vote
-===================================================== */
+
+/* ================= RECORD VOTE ================= */
 
 export const vote = async (req, res, next) => {
 
   try {
 
-    const { candidateId } = req.body
-
-    if (!candidateId) {
-      return res.status(400).json({
-        success: false,
-        message: "Candidate ID is required"
-      })
-    }
+    const { candidateId, walletAddress, txHash } = req.body
 
     const election = await Election.findById(req.params.id)
 
@@ -215,54 +215,41 @@ export const vote = async (req, res, next) => {
       })
     }
 
-    const tx = await contract.vote(
-      election.blockchainId,
-      candidateId
-    )
-
-    const receipt = await tx.wait()
-
-    return res.status(200).json({
-      success: true,
-      txHash: receipt.hash,
-      message: "Vote recorded on blockchain"
-    })
-
-  } catch (error) {
-    next(error)
-  }
-
-}
-
-
-/* =====================================================
-   CHECK IF USER HAS VOTED
-   GET /api/elections/:id/has-voted/:wallet
-===================================================== */
-
-export const hasVoted = async (req, res, next) => {
-
-  try {
-
-    const { id, wallet } = req.params
-
-    const election = await Election.findById(id)
-
-    if (!election) {
-      return res.status(404).json({
+    if (election.status !== "active") {
+      return res.status(400).json({
         success: false,
-        message: "Election not found"
+        message: "Election is not active"
       })
     }
 
-    const voted = await contract.hasVoted(
-      election.blockchainId,
-      wallet
-    )
+    const wallet = walletAddress?.toLowerCase()
+
+    const voter = await User.findOne({ walletAddress: wallet })
+
+    if (!voter || voter.isApproved !== true) {
+      return res.status(403).json({
+        success: false,
+        message: "Voter not verified"
+      })
+    }
+
+    if (election.voters.includes(wallet)) {
+      return res.status(400).json({
+        success: false,
+        message: "Already voted"
+      })
+    }
+
+    /* Blockchain already counted the vote */
+
+    election.voters.push(wallet)
+
+    await election.save()
 
     return res.status(200).json({
       success: true,
-      hasVoted: voted
+      txHash,
+      message: "Vote recorded"
     })
 
   } catch (error) {
@@ -272,10 +259,8 @@ export const hasVoted = async (req, res, next) => {
 }
 
 
-/* =====================================================
-   START ELECTION
-   POST /api/elections/:id/start
-===================================================== */
+
+/* ================= START ELECTION ================= */
 
 export const startElection = async (req, res, next) => {
 
@@ -290,9 +275,7 @@ export const startElection = async (req, res, next) => {
       })
     }
 
-    const tx = await contract.startElection(
-      election.blockchainId
-    )
+    const tx = await contract.startElection(election.blockchainId)
 
     await tx.wait()
 
@@ -302,7 +285,7 @@ export const startElection = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: "Election started successfully"
+      message: "Election started"
     })
 
   } catch (error) {
@@ -312,10 +295,8 @@ export const startElection = async (req, res, next) => {
 }
 
 
-/* =====================================================
-   END ELECTION
-   POST /api/elections/:id/end
-===================================================== */
+
+/* ================= END ELECTION ================= */
 
 export const endElection = async (req, res, next) => {
 
@@ -330,9 +311,7 @@ export const endElection = async (req, res, next) => {
       })
     }
 
-    const tx = await contract.endElection(
-      election.blockchainId
-    )
+    const tx = await contract.endElection(election.blockchainId)
 
     await tx.wait()
 
@@ -342,7 +321,7 @@ export const endElection = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: "Election ended successfully"
+      message: "Election ended"
     })
 
   } catch (error) {
@@ -352,10 +331,8 @@ export const endElection = async (req, res, next) => {
 }
 
 
-/* =====================================================
-   GET WINNER
-   GET /api/elections/:id/winner
-===================================================== */
+
+/* ================= GET WINNER ================= */
 
 export const getWinner = async (req, res, next) => {
 
@@ -363,21 +340,49 @@ export const getWinner = async (req, res, next) => {
 
     const election = await Election.findById(req.params.id)
 
-    if (!election) {
-      return res.status(404).json({
-        success: false,
-        message: "Election not found"
-      })
-    }
-
     const result = await contract.getWinner(
       election.blockchainId
     )
 
+    const winnerId = Number(result[0])
+    const votes = Number(result[1])
+
+    const candidate = election.candidates.find(
+      c => Number(c.id) === winnerId
+    )
+
     return res.status(200).json({
       success: true,
-      winnerId: Number(result[0]),
-      votes: Number(result[1])
+      winnerId,
+      votes,
+      candidate
+    })
+
+  } catch (error) {
+    next(error)
+  }
+
+}
+
+
+
+/* ================= HAS VOTED ================= */
+
+export const hasVoted = async (req, res, next) => {
+
+  try {
+
+    const election = await Election.findById(req.params.id)
+
+    const wallet = req.params.wallet?.toLowerCase()
+
+    const voted = wallet
+      ? election.voters.includes(wallet)
+      : false
+
+    return res.status(200).json({
+      success: true,
+      voted
     })
 
   } catch (error) {

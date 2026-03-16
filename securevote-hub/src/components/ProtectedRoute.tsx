@@ -1,9 +1,10 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import type { UserRole } from "@/context/AuthContext";
 
 interface Props {
   children: React.ReactNode;
-  role?: "admin" | "voter";
+  role?: UserRole | UserRole[];
 }
 
 export function ProtectedRoute({ children, role }: Props) {
@@ -21,8 +22,10 @@ export function ProtectedRoute({ children, role }: Props) {
     return <Navigate to="/auth/login" replace />;
   }
 
-  if (role && user.role !== role) {
-    return <Navigate to={user.role === "admin" ? "/admin" : "/voter"} replace />;
+  const allowedRoles = role ? (Array.isArray(role) ? role : [role]) : [];
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    const home = user.role === "admin" ? "/admin" : user.role === "subadmin" ? "/subadmin" : "/voter";
+    return <Navigate to={home} replace />;
   }
 
   return <>{children}</>;

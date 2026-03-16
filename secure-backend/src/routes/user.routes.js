@@ -1,15 +1,40 @@
 import { Router } from "express";
-import { approveVoter, getVoters, loginUser, registerUser } from "../controllers/user.controllers.js";
+import {
+    registerUser,
+    loginUser,
+    logoutUser,
+    getVoters,
+    approveVoter,
+    getSubadmins,
+    createSubadmin,
+    toggleSubadminActive,
+    deleteSubadmin,
+    getVoterHistory,
+    getCurrentUser,
+} from "../controllers/user.controllers.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
 
+const router = Router();
 
-const router=Router()
+/* ─── Public routes ──────────────────────────────── */
+router.post("/register", registerUser);
+router.post("/login", loginUser);
 
-router.route("/register").post(registerUser)
- router.route("/login").post(loginUser)
- router.get("/voters", getVoters)
-router.post("/:id/approve", approveVoter)
+/* ─── Auth-required routes ────────────────────────── */
+router.post("/logout", verifyJWT, logoutUser);
 
+// Voter management (admin / subadmin)
+router.get("/voters", verifyJWT, getVoters);
+router.post("/:id/approve", verifyJWT, approveVoter);
 
- 
+// Subadmin management (admin only)
+router.get("/subadmins", verifyJWT, getSubadmins);
+router.post("/subadmins", verifyJWT, createSubadmin);
+router.patch("/:id/toggle", verifyJWT, toggleSubadminActive);
+router.delete("/:id", verifyJWT, deleteSubadmin);
 
-export default router
+// Voter history (voter)
+router.get("/me", verifyJWT, getCurrentUser);
+router.get("/me/history", verifyJWT, getVoterHistory);
+
+export default router;

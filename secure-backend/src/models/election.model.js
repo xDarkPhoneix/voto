@@ -7,31 +7,41 @@ const { Schema } = mongoose;
  */
 const candidateSchema = new Schema(
   {
+    id: {
+      type: Number,
+      required: true, // blockchain candidate id
+    },
+
     name: {
       type: String,
       required: true,
       trim: true,
     },
+
     party: {
       type: String,
       required: true,
       trim: true,
     },
+
     imageUrl: {
       type: String,
       default: "",
     },
+
     walletAddress: {
       type: String,
       required: true,
       lowercase: true,
+      trim: true,
     },
+
     votes: {
       type: Number,
       default: 0,
     },
   },
-  { _id: true } // automatically creates candidate id
+  { _id: false } // prevent MongoDB ObjectId
 );
 
 /**
@@ -44,28 +54,40 @@ const electionSchema = new Schema(
       required: true,
       trim: true,
     },
+
     description: {
       type: String,
-      required: true,
+      default: "",
     },
+
     startDate: {
       type: Date,
       required: true,
     },
+
     endDate: {
       type: Date,
       required: true,
     },
+
     status: {
       type: String,
       enum: ["upcoming", "active", "ended"],
       default: "upcoming",
     },
+
+    blockchainId: {
+      type: Number,
+      default: null,
+    },
+
     totalVotes: {
       type: Number,
       default: 0,
     },
+
     candidates: [candidateSchema],
+
     voters: [
       {
         type: String, // walletAddress
@@ -79,23 +101,13 @@ const electionSchema = new Schema(
 );
 
 /**
- * Convert _id to id (match frontend)
+ * Convert _id → id for frontend
  */
 electionSchema.set("toJSON", {
   transform: function (doc, ret) {
     ret.id = ret._id.toString();
     delete ret._id;
     delete ret.__v;
-
-    // Convert candidate _id to id
-    if (ret.candidates) {
-      ret.candidates = ret.candidates.map((c) => {
-        c.id = c._id.toString();
-        delete c._id;
-        return c;
-      });
-    }
-
     return ret;
   },
 });

@@ -28,8 +28,16 @@ API.interceptors.response.use(
   }
 );
 
-export const loginAPI = (email: string, password: string) =>
-  API.post("/users/login", { email, password });
+export const loginAPI = (
+  email: string,
+  password: string,
+  walletAddress?: string
+) =>
+  API.post("/users/login", {
+    email,
+    password,
+    walletAddress,
+  });
 
 export const registerAPI = (data: RegisterData) =>
   API.post("/users/register", data);

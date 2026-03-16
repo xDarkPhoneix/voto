@@ -12,17 +12,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast";
 import { Wallet, UserPlus, Eye, EyeOff, Shield } from "lucide-react";
 import { motion } from "framer-motion";
+import { ethers } from "ethers"
+import contractABI from "@/abi/Voting.json"
+
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS
 
 const registerSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters").max(100),
   email: z.string().email("Invalid email address"),
   aadhaarId: z.string().regex(/^\d{4}-\d{4}-\d{4}$/, "Format: 1234-5678-9012"),
-  password: z.string().min(4, "Password must be at least 4 characters"),
-    // .regex(/[A-Z]/, "Must contain uppercase letter")
-    // .regex(/[0-9]/, "Must contain a number")
-    // .regex(/[^A-Za-z0-9]/, "Must contain a special character"),
+  password: z.string().min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Must contain uppercase letter")
+    .regex(/[0-9]/, "Must contain a number")
+    .regex(/[^A-Za-z0-9]/, "Must contain a special character"),
   confirmPassword: z.string(),
-  role: z.enum(["admin", "voter"]),
+  role: z.enum(["admin", "voter", "subadmin"]),
 }).refine((d) => d.password === d.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -42,22 +46,69 @@ export default function RegisterPage() {
     defaultValues: { role: "voter" },
   });
 
-  const onSubmit = async (data: FormData) => {
-    if (!wallet.address) {
-      toast({ title: "Connect your wallet first", variant: "destructive" });
-      return;
+ const onSubmit = async (data: FormData) => {
+
+  if (!wallet.address) {
+    toast({ title: "Connect your wallet first", variant: "destructive" })
+    return
+  }
+
+  setIsSubmitting(true)
+
+  try {
+
+    /* -------- Blockchain voter registration -------- */
+
+    if (data.role === "voter") {
+
+      const provider = new ethers.BrowserProvider((window as any).ethereum)
+      const signer = await provider.getSigner()
+
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        contractABI.abi,
+        signer
+      )
+
+      const tx = await contract.registerVoter(data.fullName)
+
+      await tx.wait()
     }
-    setIsSubmitting(true);
-    try {
-      await registerUser({ fullName: data.fullName, email: data.email, password: data.password, aadhaarId: data.aadhaarId, role: data.role, walletAddress: wallet.address });
-      toast({ title: "Registration successful!" });
-      navigate(data.role === "admin" ? "/admin" : "/voter");
-    } catch (err: any) {
-      toast({ title: err.message || "Registration failed", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+
+    /* -------- Backend registration -------- */
+
+    await registerUser({
+      fullName: data.fullName,
+      email: data.email,
+      password: data.password,
+      aadhaarId: data.aadhaarId,
+      role: data.role,
+      walletAddress: wallet.address
+    })
+
+    toast({ title: "Registration successful!" })
+
+    navigate(
+      data.role === "admin"
+        ? "/admin"
+        : data.role === "subadmin"
+        ? "/subadmin"
+        : "/voter"
+    )
+
+  } catch (err: any) {
+
+    toast({
+      title: err.message || "Registration failed",
+      variant: "destructive"
+    })
+
+  } finally {
+
+    setIsSubmitting(false)
+
+  }
+}
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -95,13 +146,14 @@ export default function RegisterPage() {
 
           <div>
             <Label>Role</Label>
-            <Select defaultValue="voter" onValueChange={(v) => setValue("role", v as "admin" | "voter")}>
+            <Select defaultValue="voter" onValueChange={(v) => setValue("role", v as "admin" | "voter" | "subadmin")}>
               <SelectTrigger className="mt-1 bg-secondary/50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="voter">Voter</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="subadmin">Sub-Admin</SelectItem>
               </SelectContent>
             </Select>
           </div>

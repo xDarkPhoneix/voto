@@ -28,7 +28,7 @@ const userSchema = new Schema(
 
     role: {
       type: String,
-      enum: ["admin", "voter"],
+      enum: ["admin", "subadmin", "voter"],
       required: true,
     },
 
@@ -42,7 +42,12 @@ const userSchema = new Schema(
 
     isApproved: {
       type: Boolean,
-      default: false,
+      default: null,
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
     },
 
     password: {

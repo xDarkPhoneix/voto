@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
-import { DashboardLayout } from "@/components/DashboardLayout";
-import { contractService, Election } from "@/services/contractService";
+import { useEffect, useState } from "react"
+import { DashboardLayout } from "@/components/DashboardLayout"
+import { contractService, Election, Candidate } from "@/services/contractService"
+
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue
-} from "@/components/ui/select";
+} from "@/components/ui/select"
 
 import {
   BarChart,
@@ -18,95 +19,128 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell
-} from "recharts";
+} from "recharts"
 
-import { Trophy } from "lucide-react";
+import { Trophy } from "lucide-react"
 
 const COLORS = [
-  "hsl(263, 70%, 58%)",
-  "hsl(190, 95%, 45%)",
-  "hsl(142, 76%, 45%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(0, 72%, 51%)"
-];
+  "hsl(263,70%,58%)",
+  "hsl(190,95%,45%)",
+  "hsl(142,76%,45%)",
+  "hsl(38,92%,50%)",
+  "hsl(0,72%,51%)"
+]
 
 export default function VoterResults() {
 
-  const [elections, setElections] = useState<Election[]>([]);
-  const [selectedElection, setSelectedElection] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [elections, setElections] = useState<Election[]>([])
+  const [selectedElection, setSelectedElection] = useState<string>("")
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [loading, setLoading] = useState(true)
 
-  /* -----------------------------------------
-     Load Elections
-  ----------------------------------------- */
+
+  /* ---------------- Load Elections ---------------- */
 
   useEffect(() => {
 
-    const loadElections = async () => {
+    const load = async () => {
 
       try {
 
-        const els = await contractService.getElections();
+        const els = await contractService.getElections()
 
-        setElections(els);
+        setElections(els)
 
         const available = els.filter(
-          (e) => e.status === "active" || e.status === "ended"
-        );
+          e => e.status === "active" || e.status === "ended"
+        )
 
         if (available.length > 0) {
-          setSelectedElection(available[0].id);
+          setSelectedElection(available[0].id)
         }
 
-      } catch (error) {
-
-        console.error("Failed to load elections", error);
-
+      } catch (err) {
+        console.error("Failed to load elections", err)
       } finally {
-
-        setLoading(false);
-
+        setLoading(false)
       }
-    };
+    }
 
-    loadElections();
+    load()
 
-  }, []);
+  }, [])
 
-  /* -----------------------------------------
-     Selected Election
-  ----------------------------------------- */
+
+  /* ---------------- Current Election ---------------- */
 
   const currentElection = elections.find(
-    (e) => e.id === selectedElection
-  );
+    e => e.id === selectedElection
+  )
 
-  /* -----------------------------------------
-     Chart Data
-  ----------------------------------------- */
 
-  const chartData =
-    currentElection?.candidates.map((c) => ({
-      name: c.name,
-      votes: c.votes
-    })) || [];
+  /* ---------------- Load Blockchain Votes ---------------- */
 
-  /* -----------------------------------------
-     Winner Logic
-  ----------------------------------------- */
+  useEffect(() => {
+
+    if (!currentElection || !currentElection.blockchainId) return
+
+    const loadVotes = async () => {
+
+      try {
+
+        const updated = await Promise.all(
+
+          currentElection.candidates.map(async (c) => {
+
+            const votes =
+              await contractService.getCandidateVotes(
+                currentElection.blockchainId!,
+                c.id
+              )
+
+            return {
+              ...c,
+              votes
+            }
+
+          })
+
+        )
+
+        setCandidates(updated)
+
+      } catch (err) {
+        console.error("Failed to load votes", err)
+      }
+
+    }
+
+    loadVotes()
+
+  }, [selectedElection, currentElection])
+
+
+  /* ---------------- Chart Data ---------------- */
+
+  const chartData = candidates.map(c => ({
+    name: c.name,
+    votes: c.votes
+  }))
+
+
+  /* ---------------- Winner ---------------- */
 
   const winner =
-    currentElection?.candidates.reduce(
-      (max, candidate) =>
-        candidate.votes > max.votes ? candidate : max,
-      currentElection?.candidates[0] || { name: "", votes: 0 }
-    );
+    candidates.reduce(
+      (max, c) => c.votes > max.votes ? c : max,
+      candidates[0] || { name: "", votes: 0 }
+    )
 
-  /* -----------------------------------------
-     UI
-  ----------------------------------------- */
+
+  /* ---------------- UI ---------------- */
 
   return (
+
     <DashboardLayout role="voter">
 
       <div className="mb-6">
@@ -121,7 +155,8 @@ export default function VoterResults() {
 
       </div>
 
-      {/* Election Selector */}
+
+      {/* Election selector */}
 
       <div className="mb-6">
 
@@ -131,16 +166,14 @@ export default function VoterResults() {
         >
 
           <SelectTrigger className="w-64 bg-secondary/50">
-
             <SelectValue placeholder="Select election" />
-
           </SelectTrigger>
 
           <SelectContent>
 
             {elections
-              .filter((e) => e.status !== "upcoming")
-              .map((e) => (
+              .filter(e => e.status !== "upcoming")
+              .map(e => (
 
                 <SelectItem key={e.id} value={e.id}>
                   {e.title}
@@ -154,45 +187,44 @@ export default function VoterResults() {
 
       </div>
 
-      {/* Winner Card */}
+
+      {/* Winner */}
 
       {winner &&
         winner.votes > 0 &&
         currentElection?.status === "ended" && (
 
-          <div className="mb-6 glass-card p-6">
+        <div className="mb-6 glass-card p-6">
 
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
 
-              <div className="rounded-full bg-yellow-500/20 p-3">
+            <div className="rounded-full bg-yellow-500/20 p-3">
+              <Trophy className="h-6 w-6 text-yellow-400"/>
+            </div>
 
-                <Trophy className="h-6 w-6 text-yellow-400" />
+            <div>
 
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Winner
+              </p>
 
-              <div>
+              <p className="text-xl font-bold">
+                {winner.name}
+              </p>
 
-                <p className="text-sm text-muted-foreground">
-                  Winner
-                </p>
-
-                <p className="text-xl font-bold">
-                  {winner.name}
-                </p>
-
-                <p className="text-sm text-muted-foreground">
-                  {winner.votes} votes
-                </p>
-
-              </div>
+              <p className="text-sm text-muted-foreground">
+                {winner.votes} votes
+              </p>
 
             </div>
 
           </div>
 
-        )}
+        </div>
+      )}
 
-      {/* Vote Chart */}
+
+      {/* Chart */}
 
       <div className="glass-card p-6">
 
@@ -214,32 +246,29 @@ export default function VoterResults() {
 
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="hsl(230, 20%, 18%)"
+                stroke="hsl(230,20%,18%)"
               />
 
               <XAxis
                 dataKey="name"
-                stroke="hsl(215, 20%, 55%)"
+                stroke="hsl(215,20%,55%)"
                 fontSize={12}
               />
 
               <YAxis
-                stroke="hsl(215, 20%, 55%)"
+                stroke="hsl(215,20%,55%)"
                 fontSize={12}
               />
 
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(230, 25%, 12%)",
-                  border: "1px solid hsl(230, 20%, 22%)",
+                  backgroundColor: "hsl(230,25%,12%)",
+                  border: "1px solid hsl(230,20%,22%)",
                   borderRadius: "8px"
                 }}
               />
 
-              <Bar
-                dataKey="votes"
-                radius={[6, 6, 0, 0]}
-              >
+              <Bar dataKey="votes" radius={[6,6,0,0]}>
 
                 {chartData.map((_, index) => (
 
@@ -267,5 +296,7 @@ export default function VoterResults() {
       </div>
 
     </DashboardLayout>
-  );
+
+  )
+
 }

@@ -22,9 +22,9 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 
 
-/* =========================================
-   Form Validation
-========================================= */
+/* ================================
+   Validation
+================================ */
 
 const electionSchema = z.object({
   title: z.string().min(3, "Title required"),
@@ -36,15 +36,13 @@ const electionSchema = z.object({
 type ElectionForm = z.infer<typeof electionSchema>
 
 
-/* =========================================
-   Component
-========================================= */
 
 export default function AdminElections() {
 
   const [elections, setElections] = useState<Election[]>([])
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState<string | null>(null)
+  const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [pageLoading, setPageLoading] = useState(true)
 
   const {
     register,
@@ -56,24 +54,30 @@ export default function AdminElections() {
   })
 
 
-  /* =========================================
+  /* ================================
      Load Elections
-  ========================================= */
+  ================================ */
 
   const loadElections = async () => {
 
     try {
 
-      const els = await contractService.getElections()
+      setPageLoading(true)
 
-      setElections(els)
+      const data = await contractService.getElections()
 
-    } catch (error) {
+      setElections(data)
+
+    } catch {
 
       toast({
         title: "Failed to load elections",
         variant: "destructive"
       })
+
+    } finally {
+
+      setPageLoading(false)
 
     }
 
@@ -84,27 +88,27 @@ export default function AdminElections() {
   }, [])
 
 
-  /* =========================================
+
+  /* ================================
      Create Election
-  ========================================= */
+  ================================ */
 
   const onCreate = async (data: ElectionForm) => {
 
     try {
 
       await contractService.createElection({
-        title: data.title,
-        description: data.description,
-        startDate: data.startDate,
-        endDate: data.endDate
-      })
+  title: data.title!,
+  description: data.description!,
+  startDate: data.startDate!,
+  endDate: data.endDate!
+})
 
       toast({
         title: "Election created successfully"
       })
 
       setOpen(false)
-
       reset()
 
       await loadElections()
@@ -112,7 +116,7 @@ export default function AdminElections() {
     } catch (err: any) {
 
       toast({
-        title: err?.message || "Transaction failed",
+        title: err?.message || "Failed to create election",
         variant: "destructive"
       })
 
@@ -121,30 +125,25 @@ export default function AdminElections() {
   }
 
 
-  /* =========================================
+
+  /* ================================
      Start / End Election
-  ========================================= */
+  ================================ */
 
   const toggleElection = async (
     id: string,
     action: "start" | "end"
   ) => {
 
-    setLoading(id)
-
     try {
 
+      setLoadingId(id)
+
       if (action === "start") {
-
         await contractService.startElection(id)
-
       } else {
-
         await contractService.endElection(id)
-
       }
-
-      await loadElections()
 
       toast({
         title: action === "start"
@@ -152,23 +151,43 @@ export default function AdminElections() {
           : "Election ended"
       })
 
+      await loadElections()
+
     } catch (err: any) {
 
       toast({
-        title: err?.message || "Transaction failed",
+        title: err?.message || "Operation failed",
         variant: "destructive"
       })
 
-    }
+    } finally {
 
-    setLoading(null)
+      setLoadingId(null)
+
+    }
 
   }
 
 
-  /* =========================================
+
+  /* ================================
+     Helpers
+  ================================ */
+
+  const renderStatusColor = (status: string) => {
+
+    if (status === "active") return "text-green-400"
+    if (status === "upcoming") return "text-blue-400"
+
+    return "text-gray-400"
+
+  }
+
+
+
+  /* ================================
      UI
-  ========================================= */
+  ================================ */
 
   return (
 
@@ -177,7 +196,6 @@ export default function AdminElections() {
       <div className="mb-6 flex items-center justify-between">
 
         <div>
-
           <h1 className="text-3xl font-bold">
             Elections
           </h1>
@@ -185,11 +203,11 @@ export default function AdminElections() {
           <p className="text-muted-foreground">
             Manage blockchain elections
           </p>
-
         </div>
 
 
-        {/* Create Election Dialog */}
+
+        {/* Create Election */}
 
         <Dialog open={open} onOpenChange={setOpen}>
 
@@ -209,11 +227,7 @@ export default function AdminElections() {
           <DialogContent>
 
             <DialogHeader>
-
-              <DialogTitle>
-                Create Election
-              </DialogTitle>
-
+              <DialogTitle>Create Election</DialogTitle>
             </DialogHeader>
 
 
@@ -278,13 +292,8 @@ export default function AdminElections() {
               </div>
 
 
-              <Button
-                type="submit"
-                className="w-full"
-              >
-
+              <Button type="submit" className="w-full">
                 Create Election
-
               </Button>
 
             </form>
@@ -296,9 +305,26 @@ export default function AdminElections() {
       </div>
 
 
-      {/* Elections List */}
+
+      {/* Election List */}
 
       <div className="space-y-4">
+
+        {pageLoading && (
+          <p className="text-center text-muted-foreground">
+            Loading elections...
+          </p>
+        )}
+
+
+
+        {!pageLoading && elections.length === 0 && (
+          <p className="text-center text-muted-foreground">
+            No elections created yet
+          </p>
+        )}
+
+
 
         {elections.map(el => (
 
@@ -312,16 +338,16 @@ export default function AdminElections() {
               <div className="flex items-start gap-3">
 
                 <div className="rounded-lg bg-primary/20 p-2">
-
                   <Vote className="h-5 w-5 text-primary" />
-
                 </div>
+
 
                 <div>
 
                   <h3 className="font-semibold">
                     {el.title}
                   </h3>
+
 
                   <div className="mt-1 flex gap-3 text-xs text-muted-foreground">
 
@@ -333,18 +359,8 @@ export default function AdminElections() {
                       {el.totalVotes} votes
                     </span>
 
-                    <span
-                      className={
-                        el.status === "active"
-                          ? "text-green-400"
-                          : el.status === "upcoming"
-                          ? "text-blue-400"
-                          : "text-gray-400"
-                      }
-                    >
-
+                    <span className={renderStatusColor(el.status)}>
                       {el.status}
-
                     </span>
 
                   </div>
@@ -352,6 +368,7 @@ export default function AdminElections() {
                 </div>
 
               </div>
+
 
 
               {/* Actions */}
@@ -362,10 +379,10 @@ export default function AdminElections() {
 
                   <Button
                     size="sm"
+                    disabled={loadingId === el.id}
                     onClick={() =>
                       toggleElection(el.id, "start")
                     }
-                    disabled={loading === el.id}
                   >
 
                     <Play className="mr-1 h-3 w-3" />
@@ -377,15 +394,16 @@ export default function AdminElections() {
                 )}
 
 
+
                 {el.status === "active" && (
 
                   <Button
                     size="sm"
                     variant="destructive"
+                    disabled={loadingId === el.id}
                     onClick={() =>
                       toggleElection(el.id, "end")
                     }
-                    disabled={loading === el.id}
                   >
 
                     <Square className="mr-1 h-3 w-3" />
