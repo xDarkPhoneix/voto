@@ -47,22 +47,8 @@ export default function LoginPage() {
 
       let walletAddress: string | undefined;
 
-      /* Connect wallet if user clicked connect */
       if (wallet.isConnected) {
         walletAddress = wallet.address;
-
-        /* Optional signature verification */
-        const message = `Sign in to BlockVote\nTimestamp: ${Date.now()}`;
-
-        try {
-          await wallet.signMessage(message);
-        } catch {
-          toast({
-            title: "Wallet signature rejected",
-            variant: "destructive",
-          });
-          return;
-        }
       }
 
       /* Login via backend */

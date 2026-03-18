@@ -188,40 +188,40 @@ export default function VoterResults() {
       </div>
 
 
-      {/* Winner */}
+      {/* Winner / Leading Candidate */}
 
       {winner &&
         winner.votes > 0 &&
-        currentElection?.status === "ended" && (
+        (currentElection?.status === "active" || currentElection?.status === "ended") && (
 
-        <div className="mb-6 glass-card p-6">
+          <div className="mb-6 glass-card p-6">
 
-          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
 
-            <div className="rounded-full bg-yellow-500/20 p-3">
-              <Trophy className="h-6 w-6 text-yellow-400"/>
-            </div>
+              <div className="rounded-full bg-yellow-500/20 p-3">
+                <Trophy className="h-6 w-6 text-yellow-400" />
+              </div>
 
-            <div>
+              <div>
 
-              <p className="text-sm text-muted-foreground">
-                Winner
-              </p>
+                <p className="text-sm text-muted-foreground">
+                  {currentElection?.status === "ended" ? "Winner" : "Leading Candidate"}
+                </p>
 
-              <p className="text-xl font-bold">
-                {winner.name}
-              </p>
+                <p className="text-xl font-bold">
+                  {winner.name}
+                </p>
 
-              <p className="text-sm text-muted-foreground">
-                {winner.votes} votes
-              </p>
+                <p className="text-sm text-muted-foreground">
+                  {winner.votes} votes
+                </p>
+
+              </div>
 
             </div>
 
           </div>
-
-        </div>
-      )}
+        )}
 
 
       {/* Chart */}
@@ -268,7 +268,7 @@ export default function VoterResults() {
                 }}
               />
 
-              <Bar dataKey="votes" radius={[6,6,0,0]}>
+              <Bar dataKey="votes" radius={[6, 6, 0, 0]}>
 
                 {chartData.map((_, index) => (
 

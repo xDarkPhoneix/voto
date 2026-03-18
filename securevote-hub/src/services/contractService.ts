@@ -153,6 +153,33 @@ export const contractService = {
   },
 
 
+
+  /* -------- CREATE ELECTION (BLOCKCHAIN) -------- */
+
+  async createElectionBlockchain(data: {
+    title: string
+    description: string
+    startDate: string
+    endDate: string
+  }): Promise<string> {
+
+    const contract = await getContract();
+
+    const start = Math.floor(new Date(data.startDate).getTime() / 1000);
+    const end = Math.floor(new Date(data.endDate).getTime() / 1000);
+
+    const tx = await contract.createElection(
+      data.title,
+      data.description || "",
+      start,
+      end
+    );
+
+    const receipt = await tx.wait();
+    return receipt.hash;
+  },
+
+
   /* -------- CREATE ELECTION -------- */
 
   async createElection(data: {
@@ -162,10 +189,44 @@ export const contractService = {
     endDate: string
   }): Promise<Election> {
 
-    const res = await API.post("/elections", data)
+    // 1. Blockchain transaction via MetaMask
+    const txHash = await this.createElectionBlockchain(data);
+
+    // 2. Sync with backend
+    const res = await API.post("/elections", {
+      ...data,
+      txHash
+    });
 
     return normalizeElection(res.data?.data)
 
+  },
+
+
+  /* -------- ADD CANDIDATE (BLOCKCHAIN) -------- */
+
+  async addCandidateBlockchain(
+    blockchainElectionId: number,
+    candidate: {
+      name: string
+      party: string
+      imageUrl?: string
+      walletAddress: string
+    }
+  ): Promise<string> {
+
+    const contract = await getContract();
+
+    const tx = await contract.addCandidate(
+      blockchainElectionId,
+      candidate.name,
+      candidate.party || "",
+      candidate.imageUrl || "",
+      candidate.walletAddress || "0x0000000000000000000000000000000000000000"
+    );
+
+    const receipt = await tx.wait();
+    return receipt.hash;
   },
 
 
@@ -181,11 +242,26 @@ export const contractService = {
     }
   ): Promise<Candidate> {
 
+    // Get the election first to find blockchainId
+    const election = await this.getElection(electionId);
+
+    if (election.blockchainId === undefined || election.blockchainId === null) {
+      throw new Error("Election not initialized on blockchain");
+    }
+
+    // 1. Blockchain transaction
+    const txHash = await this.addCandidateBlockchain(
+      election.blockchainId,
+      candidate
+    );
+
+    // 2. Sync with backend
     const res = await API.post(
       `/elections/${electionId}/candidates`,
       {
         ...candidate,
-        walletAddress: candidate.walletAddress.toLowerCase()
+        walletAddress: candidate.walletAddress.toLowerCase(),
+        txHash
       }
     )
 
@@ -255,12 +331,40 @@ export const contractService = {
   },
 
 
+
+  /* -------- START ELECTION (BLOCKCHAIN) -------- */
+
+  async startElectionBlockchain(blockchainId: number): Promise<string> {
+    const contract = await getContract();
+    const tx = await contract.startElection(blockchainId);
+    const receipt = await tx.wait();
+    return receipt.hash;
+  },
+
+
   /* -------- START ELECTION -------- */
 
   async startElection(electionId: string): Promise<void> {
 
-    await API.post(`/elections/${electionId}/start`)
+    const election = await this.getElection(electionId);
+    if (election.blockchainId === undefined || election.blockchainId === null) {
+      throw new Error("Election not initialized on blockchain");
+    }
 
+    const txHash = await this.startElectionBlockchain(election.blockchainId);
+
+    await API.post(`/elections/${electionId}/start`, { txHash })
+
+  },
+
+
+  /* -------- END ELECTION (BLOCKCHAIN) -------- */
+
+  async endElectionBlockchain(blockchainId: number): Promise<string> {
+    const contract = await getContract();
+    const tx = await contract.endElection(blockchainId);
+    const receipt = await tx.wait();
+    return receipt.hash;
   },
 
 
@@ -268,7 +372,14 @@ export const contractService = {
 
   async endElection(electionId: string): Promise<void> {
 
-    await API.post(`/elections/${electionId}/end`)
+    const election = await this.getElection(electionId);
+    if (election.blockchainId === undefined || election.blockchainId === null) {
+      throw new Error("Election not initialized on blockchain");
+    }
+
+    const txHash = await this.endElectionBlockchain(election.blockchainId);
+
+    await API.post(`/elections/${electionId}/end`, { txHash })
 
   },
 

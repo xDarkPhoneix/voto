@@ -46,69 +46,53 @@ export default function RegisterPage() {
     defaultValues: { role: "voter" },
   });
 
- const onSubmit = async (data: FormData) => {
+  const onSubmit = async (data: FormData) => {
 
-  if (!wallet.address) {
-    toast({ title: "Connect your wallet first", variant: "destructive" })
-    return
-  }
-
-  setIsSubmitting(true)
-
-  try {
-
-    /* -------- Blockchain voter registration -------- */
-
-    if (data.role === "voter") {
-
-      const provider = new ethers.BrowserProvider((window as any).ethereum)
-      const signer = await provider.getSigner()
-
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        contractABI.abi,
-        signer
-      )
-
-      const tx = await contract.registerVoter(data.fullName)
-
-      await tx.wait()
+    if (!wallet.address) {
+      toast({ title: "Connect your wallet first", variant: "destructive" })
+      return
     }
 
-    /* -------- Backend registration -------- */
+    setIsSubmitting(true)
 
-    await registerUser({
-      fullName: data.fullName,
-      email: data.email,
-      password: data.password,
-      aadhaarId: data.aadhaarId,
-      role: data.role,
-      walletAddress: wallet.address
-    })
+    try {
 
-    toast({ title: "Registration successful!" })
+      // Reliance on AuthContext.register which handles both Blockchain and DB registration
 
-    navigate(
-      data.role === "admin"
-        ? "/admin"
-        : data.role === "subadmin"
-        ? "/subadmin"
-        : "/voter"
-    )
+      /* -------- Backend registration -------- */
 
-  } catch (err: any) {
+      await registerUser({
+        fullName: data.fullName,
+        email: data.email,
+        password: data.password,
+        aadhaarId: data.aadhaarId,
+        role: data.role,
+        walletAddress: wallet.address
+      })
 
-    toast({
-      title: err.message || "Registration failed",
-      variant: "destructive"
-    })
+      toast({ title: "Registration successful!" })
 
-  } finally {
+      navigate(
+        data.role === "admin"
+          ? "/admin"
+          : data.role === "subadmin"
+            ? "/subadmin"
+            : "/voter"
+      )
 
-    setIsSubmitting(false)
+    } catch (err: any) {
 
+      toast({
+        title: err.message || "Registration failed",
+        variant: "destructive"
+      })
+
+    } finally {
+
+      setIsSubmitting(false)
+
+    }
   }
-}
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">

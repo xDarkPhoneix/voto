@@ -133,7 +133,10 @@ export default function AdminCandidates() {
 
     try {
 
-      setSubmitting(true)
+      toast({
+        title: "Confirm transaction in MetaMask",
+        description: "Waiting for blockchain confirmation..."
+      })
 
       await contractService.addCandidate(
         selectedElection,
@@ -146,7 +149,7 @@ export default function AdminCandidates() {
       )
 
       toast({
-        title: "Candidate added to blockchain"
+        title: "Candidate added successfully"
       })
 
       setOpen(false)
@@ -256,7 +259,7 @@ export default function AdminCandidates() {
                 className="w-full"
                 disabled={submitting}
               >
-                {submitting ? "Submitting..." : "Add Candidate"}
+                {submitting ? "Adding on Blockchain..." : "Add Candidate"}
               </Button>
 
             </form>
@@ -338,46 +341,46 @@ export default function AdminCandidates() {
             {!loadingPage &&
               currentElection?.candidates.map(c => (
 
-              <TableRow key={c.id}>
+                <TableRow key={c.id}>
 
-                <TableCell className="font-medium">
-                  {c.name}
-                </TableCell>
+                  <TableCell className="font-medium">
+                    {c.name}
+                  </TableCell>
 
-                <TableCell>
-                  {c.party}
-                </TableCell>
+                  <TableCell>
+                    {c.party}
+                  </TableCell>
 
-                <TableCell className="text-right font-semibold">
-                  {c.votes}
-                </TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {c.votes}
+                  </TableCell>
 
-              </TableRow>
+                </TableRow>
 
-            ))}
+              ))}
 
 
 
             {!loadingPage &&
               (!currentElection ||
-              currentElection.candidates.length === 0) && (
+                currentElection.candidates.length === 0) && (
 
-              <TableRow>
+                <TableRow>
 
-                <TableCell
-                  colSpan={3}
-                  className="py-8 text-center text-muted-foreground"
-                >
+                  <TableCell
+                    colSpan={3}
+                    className="py-8 text-center text-muted-foreground"
+                  >
 
-                  <Users className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                    <Users className="mx-auto mb-2 h-8 w-8 opacity-50" />
 
-                  No candidates yet
+                    No candidates yet
 
-                </TableCell>
+                  </TableCell>
 
-              </TableRow>
+                </TableRow>
 
-            )}
+              )}
 
           </TableBody>
 

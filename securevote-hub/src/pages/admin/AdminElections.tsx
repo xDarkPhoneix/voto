@@ -93,16 +93,25 @@ export default function AdminElections() {
      Create Election
   ================================ */
 
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   const onCreate = async (data: ElectionForm) => {
 
     try {
 
+      setIsSubmitting(true)
+
+      toast({
+        title: "Confirm transaction in MetaMask",
+        description: "Waiting for blockchain confirmation..."
+      })
+
       await contractService.createElection({
-  title: data.title!,
-  description: data.description!,
-  startDate: data.startDate!,
-  endDate: data.endDate!
-})
+        title: data.title!,
+        description: data.description!,
+        startDate: data.startDate!,
+        endDate: data.endDate!
+      })
 
       toast({
         title: "Election created successfully"
@@ -120,6 +129,8 @@ export default function AdminElections() {
         variant: "destructive"
       })
 
+    } finally {
+      setIsSubmitting(false)
     }
 
   }
@@ -292,8 +303,12 @@ export default function AdminElections() {
               </div>
 
 
-              <Button type="submit" className="w-full">
-                Create Election
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Creating on Blockchain..." : "Create Election"}
               </Button>
 
             </form>

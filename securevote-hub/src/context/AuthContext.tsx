@@ -6,23 +6,23 @@ import contractABI from "@/abi/Voting.json";
 export type UserRole = "admin" | "subadmin" | "voter";
 
 export interface User {
-_id: string;
-fullName: string;
-email: string;
-role: UserRole;
-walletAddress: string;
-aadhaarId: string;
-isApproved: boolean;
+  _id: string;
+  fullName: string;
+  email: string;
+  role: UserRole;
+  walletAddress: string;
+  aadhaarId: string;
+  isApproved: boolean;
 }
 
 interface AuthContextType {
-user: User | null;
-token: string | null;
-isLoading: boolean;
-login: (email: string, password: string) => Promise<void>;
-register: (data: RegisterData) => Promise<void>;
-logout: () => void;
-isAuthenticated: boolean;
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  login: (email: string, password: string, walletAddress?: string) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
+  logout: () => void;
+  isAuthenticated: boolean;
 }
 
 export interface RegisterData {
@@ -40,182 +40,187 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
 
-const [user, setUser] = useState<User | null>(null);
-const [token, setToken] = useState<string | null>(null);
-const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-/* ---------------- RESTORE SESSION ---------------- */
+  /* ---------------- RESTORE SESSION ---------------- */
 
-useEffect(() => {
-const savedToken = localStorage.getItem("bv_token");
-const savedUser = localStorage.getItem("bv_user");
+  useEffect(() => {
+    const savedToken = localStorage.getItem("bv_token");
+    const savedUser = localStorage.getItem("bv_user");
 
 
-if (savedToken && savedUser) {
-  setToken(savedToken);
-  setUser(JSON.parse(savedUser));
-}
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      setUser(JSON.parse(savedUser));
+    }
 
-setIsLoading(false);
+    setIsLoading(false);
 
 
-}, []);
+  }, []);
 
-/* ---------------- CONNECT WALLET ---------------- */
+  /* ---------------- CONNECT WALLET ---------------- */
 
-const connectWallet = async () => {
+  const connectWallet = async () => {
 
 
-const ethereum = (window as any).ethereum;
+    const ethereum = (window as any).ethereum;
 
-if (!ethereum) {
-  throw new Error("MetaMask not installed");
-}
+    if (!ethereum) {
+      throw new Error("MetaMask not installed");
+    }
 
-const provider = new ethers.BrowserProvider(ethereum);
+    const provider = new ethers.BrowserProvider(ethereum);
 
-await provider.send("eth_requestAccounts", []);
+    await provider.send("eth_requestAccounts", []);
 
-const signer = await provider.getSigner();
+    const signer = await provider.getSigner();
 
-const address = await signer.getAddress();
+    const address = await signer.getAddress();
 
-return { provider, signer, address };
+    return { provider, signer, address };
 
 
-};
+  };
 
-/* ---------------- LOGIN ---------------- */
+  /* ---------------- LOGIN ---------------- */
 
-const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, walletAddress?: string) => {
 
 
-setIsLoading(true);
+    setIsLoading(true);
 
-try {
+    try {
 
-  const { address } = await connectWallet();
+      let address = walletAddress;
 
-  const res = await loginAPI(email, password, address);
+      if (!address) {
+        const connection = await connectWallet();
+        address = connection.address;
+      }
 
-  const { user: userData, accessToken } = res.data.data;
+      const res = await loginAPI(email, password, address);
 
-  setUser(userData);
-  setToken(accessToken);
+      const { user: userData, accessToken } = res.data.data;
 
-  localStorage.setItem("bv_token", accessToken);
-  localStorage.setItem("bv_user", JSON.stringify(userData));
+      setUser(userData);
+      setToken(accessToken);
 
-} finally {
+      localStorage.setItem("bv_token", accessToken);
+      localStorage.setItem("bv_user", JSON.stringify(userData));
 
-  setIsLoading(false);
+    } finally {
 
-}
+      setIsLoading(false);
 
+    }
 
-};
 
-/* ---------------- REGISTER ON BLOCKCHAIN ---------------- */
+  };
 
-const registerOnBlockchain = async (name: string) => {
+  /* ---------------- REGISTER ON BLOCKCHAIN ---------------- */
 
+  const registerOnBlockchain = async (name: string) => {
 
-const { signer } = await connectWallet();
 
-const contract = new ethers.Contract(
-  CONTRACT_ADDRESS,
-  contractABI.abi,
-  signer
-);
+    const { signer } = await connectWallet();
 
-const tx = await contract.registerVoter(name);
+    const contract = new ethers.Contract(
+      CONTRACT_ADDRESS,
+      contractABI.abi,
+      signer
+    );
 
-await tx.wait();
+    const tx = await contract.registerVoter(name);
 
+    await tx.wait();
 
-};
 
-/* ---------------- REGISTER USER ---------------- */
+  };
 
-const register = async (data: RegisterData) => {
+  /* ---------------- REGISTER USER ---------------- */
 
+  const register = async (data: RegisterData) => {
 
-setIsLoading(true);
 
-try {
+    setIsLoading(true);
 
-  const { address } = await connectWallet();
+    try {
 
-  /* Register voter on blockchain first */
+      const { address } = await connectWallet();
 
-  if (data.role === "voter") {
-    await registerOnBlockchain(data.fullName);
-  }
+      /* Register voter on blockchain first */
 
-  const res = await registerAPI({
-    ...data,
-    walletAddress: address
-  });
+      if (data.role === "voter") {
+        await registerOnBlockchain(data.fullName);
+      }
 
-  const { user: userData, accessToken } = res.data.data;
+      const res = await registerAPI({
+        ...data,
+        walletAddress: address
+      });
 
-  setUser(userData);
-  setToken(accessToken);
+      const { user: userData, accessToken } = res.data.data;
 
-  localStorage.setItem("bv_token", accessToken);
-  localStorage.setItem("bv_user", JSON.stringify(userData));
+      setUser(userData);
+      setToken(accessToken);
 
-} finally {
+      localStorage.setItem("bv_token", accessToken);
+      localStorage.setItem("bv_user", JSON.stringify(userData));
 
-  setIsLoading(false);
+    } finally {
 
-}
+      setIsLoading(false);
 
+    }
 
-};
 
-/* ---------------- LOGOUT ---------------- */
+  };
 
-const logout = async () => {
+  /* ---------------- LOGOUT ---------------- */
 
+  const logout = async () => {
 
-try {
-  await logoutAPI();
-} catch {}
 
-setUser(null);
-setToken(null);
+    try {
+      await logoutAPI();
+    } catch { }
 
-localStorage.removeItem("bv_token");
-localStorage.removeItem("bv_user");
+    setUser(null);
+    setToken(null);
 
+    localStorage.removeItem("bv_token");
+    localStorage.removeItem("bv_user");
 
-};
 
-return (
-<AuthContext.Provider
-value={{
-user,
-token,
-isLoading,
-login,
-register,
-logout,
-isAuthenticated: !!user
-}}
->
-{children}
-</AuthContext.Provider>
-);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        isLoading,
+        login,
+        register,
+        logout,
+        isAuthenticated: !!user
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
 
-const ctx = useContext(AuthContext);
+  const ctx = useContext(AuthContext);
 
-if (!ctx) {
-throw new Error("useAuth must be used within AuthProvider");
-}
+  if (!ctx) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
 
-return ctx;
+  return ctx;
 }

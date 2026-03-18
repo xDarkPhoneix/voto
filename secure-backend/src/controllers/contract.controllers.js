@@ -99,17 +99,7 @@ export const createElection = async (req, res, next) => {
       })
     }
 
-    /* ---- Blockchain ---- */
-
-    const tx = await contract.createElection(
-      title,
-      description || "",
-      start,
-      end
-    )
-
-    const receipt = await tx.wait()
-
+    /* ---- blockchainId from contract ---- */
     const electionCount = await contract.electionCount()
 
     const election = await Election.create({
@@ -122,7 +112,7 @@ export const createElection = async (req, res, next) => {
       candidates: [],
       voters: [],
       totalVotes: 0,
-      txHash: receipt.hash
+      txHash: req.body.txHash
     })
 
     return res.status(201).json({
@@ -161,16 +151,6 @@ export const addCandidate = async (req, res, next) => {
 
     const wallet = walletAddress?.toLowerCase()
 
-    const tx = await contract.addCandidate(
-      election.blockchainId,
-      name,
-      party || "",
-      imageUrl || "",
-      wallet || "0x0000000000000000000000000000000000000000"
-    )
-
-    await tx.wait()
-
     /* candidate id comes from blockchain order */
     const candidateId = election.candidates.length + 1
 
@@ -182,6 +162,10 @@ export const addCandidate = async (req, res, next) => {
       walletAddress: wallet,
       votes: 0
     })
+
+    if (req.body.txHash) {
+      // Optional: Log txHash or update last action
+    }
 
     await election.save()
 
@@ -275,11 +259,11 @@ export const startElection = async (req, res, next) => {
       })
     }
 
-    const tx = await contract.startElection(election.blockchainId)
-
-    await tx.wait()
-
     election.status = "active"
+
+    if (req.body.txHash) {
+      // Optional: Log txHash
+    }
 
     await election.save()
 
@@ -311,11 +295,11 @@ export const endElection = async (req, res, next) => {
       })
     }
 
-    const tx = await contract.endElection(election.blockchainId)
-
-    await tx.wait()
-
     election.status = "ended"
+
+    if (req.body.txHash) {
+      // Optional: Log txHash
+    }
 
     await election.save()
 
