@@ -150,7 +150,7 @@ export default function LoginPage() {
 
           {/* Wallet */}
           <div>
-            <Label>MetaMask (Optional)</Label>
+            <Label>MetaMask </Label>
 
             {wallet.isConnected ? (
               <div className="mt-1 flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
